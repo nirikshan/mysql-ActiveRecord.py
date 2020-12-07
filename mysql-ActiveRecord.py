@@ -164,24 +164,24 @@ db = Sql()
 # result = db.insert_bulk('tb_import' ,[
 #    {
 #     'name'    :  'Nirikshan',
-#     'phone'   :  9861280012,
+#     'phone'   :  444475,
 #     'address' :  'Anamnager4'
 #   },
 #   {
 #     'name'    :  'Nirikshan2',
-#     'phone'   :  986180012,
+#     'phone'   :  12222,
 #     'address' :  'Anamnager3'
 #   },
 #   {
 #     'name'    :  'Nirikshan3',
-#     'phone'   :  98610012,
+#     'phone'   :  3333656,
 #     'address' :  'Anamnager2'
 #   }
 # ])
 
 # result = db.update('tb_import' , {
 #     'name'    :  'Nirikshan3',
-#     'phone'   :  98610012,
+#     'phone'   :  555245,
 #     'address' :  'Anamnager2'
 # }).where({
 #   'name':'nirikshan'
@@ -192,19 +192,19 @@ result = db.update_bulk('tb_import' , [
    {
     'id'     :  1,
     'name'    :  'Nirikshan',
-    'phone'   :  9861280012,
+    'phone'   :  7855525,
     'address' :  'Anamnager4'
   },
   {
     'id'      :  2,
     'name'    :  'Nirikshan2',
-    'phone'   :  986180012,
+    'phone'   :  989999,
     'address' :  'Anamnager3'
   },
   {
     'id'      :  3,
     'name'    :  'Nirikshan3',
-    'phone'   :  98610012,
+    'phone'   :  2223,
     'address' :  'Anamnager2'
   }
 ] , 'id')
