@@ -1,13 +1,25 @@
-class Sql:
-  
-  def __init__(self):
-    self.tableName = ''
-    self.build     = '';
+from django.db import connection
 
-  def select(self , item):
+class db:
+  
+  def __init__(self , devtype = 'prod' ):
+    self.cursor        = connection.cursor()
+    self.devtype       = devtype
+    self.tableName     = ''
+    self.build         = ''
+    self.inputSet      =  ()
+    self.inputSetBulk  =  []
+  
+  
+  def FlushBuild(self):
+      self.build        = ''
+      self.inputSetBulk = []
+      self.inputSet     = ()
+  
+      
+  def select(self , item = '*'):
     self.build += "SELECT "+item
     return self
-
 
   def select_distinct(self , item):
     self.build += "SELECT DISTINCT "+item
@@ -17,11 +29,13 @@ class Sql:
   def ActualWhere(self , paired , Type = 'AND' , WhereType = ' WHERE '):
     pairs = []
     for item in paired:
-      consition = ('=' in item) or ('>' in item) or ('<' in item)
+      condition = ('=' in item) or ('>' in item) or ('<' in item)
       value     = paired[item]
-      pairs.append(item + ( '' if consition else '=') + ( "'"+str(value)+"'" if type(value) == str else str(value) ) )
+      Inputes   = ( "'"+str(value)+"'" if type(value) == str else str(value) ) 
+      self.inputSet = self.inputSet + (Inputes ,)
+      pairs.append(item + ( '' if condition else '=') + '%s' )
     syntax = Type.join(pairs)
-    self.build = self.build+WhereType+syntax
+    self.build = self.build + WhereType + syntax
 
 
   def where(self , paired):
@@ -65,154 +79,127 @@ class Sql:
     return ','.join( (str(v) if type(v) == int else ""+quoType+""+str(v)+""+quoType+"" ) for v in value)
 
 
-  def insert(self , TableName , Data):
+  def insert(self , TableName , Data , out="result"):
     Keys  = []
     Value = []
     for item in Data:
       Keys.append(item)
-      Value.append(Data[item])
+      Value.append('%s')
+      # self.inputSet.append(Data[item])
+      self.inputSet = self.inputSet + (Data[item] ,)
     Keys  = '('+self.AllStr(Keys , '`')+')'
-    Value = '('+self.AllStr(Value , "'")+')'
+    Value = '('+self.AllStr(Value , " ")+')'
     self.build = 'INSERT INTO `{0}` {1}  VALUES {2} '.format(TableName , Keys , Value)
-    return self
+    if out == "query":
+      Build    = self.build
+      InputSet = self.inputSet
+      self.FlushBuild()
+      return [ Build , InputSet ]
+    return self.exe(self.build , self.inputSet , 'answer')
 
 
-  def insert_bulk(self , TableName , DataList):
-    Keys      = set()
-    BulkValue = []
+  def insert_bulk(self , TableName , DataList , out="result"):
+    Keys        = []
+    BulkValue   = []
+    InputPlaces = []
     for item in DataList:
-      Value = []
+      Value = ()
       for key in item:
-        Keys.add(key)
-        Value.append(item[key])
-      Value = '('+self.AllStr(Value , "'")+')'
-      BulkValue.append(Value)
-    BulkValue = self.AllStr(BulkValue , "");
-    Keys      = '('+self.AllStr(Keys , "`")+')'
-    self.build = 'INSERT INTO `{0}` {1}  VALUES {2}'.format(TableName , Keys , BulkValue)
-    return self
-  
+        if not key in Keys:
+          Keys.append(key)
+          InputPlaces.append(' %s ')
+        Value = Value + (item[key] ,)
+      self.inputSetBulk.append(Value)
+    Keys        = '('+self.AllStr(Keys , "`")+')'
+    InputPlaces = '('+self.AllStr(InputPlaces , "")+')'
+    self.build = 'INSERT INTO `{0}` {1}  VALUES {2}'.format(TableName , Keys , InputPlaces)
+    
+    if out == "query":
+      Build    = self.build
+      InputSet = self.inputSetBulk
+      self.FlushBuild()
+      return [ Build , InputSet ]
+    return self.exe(self.build , self.inputSetBulk , 'answer' , True)
 
-  def update(self , TableName , Data):
+
+  def update(self , TableName , Data , out="result"):
     Collection = ''
+    UpdateValue = ()
     for item in Data:
       value = Data[item]
-      Collection += ('' if Collection == '' else ' , ')+'`'+str(item)+'` = '+( str(value) if type(value) == int else "'"+str(value)+"'" )
-    self.build = 'UPDATE `{0}` SET {1}'.format(TableName , Collection)
-    return self
-
-  def update_bulk(self , TableName , Collection , UpdateFrom):
-    # I will write this tommorrow
-    # Like : INSERT INTO `tb_import` (`id`, `name`, `phone`, `address`) VALUES (1 , 'nirikshan3' , 986 , 'anam') ON DUPLICATE KEY UPDATE name=VALUES(name),phone=VALUES(phone)
-    # Because This query performs very fast
-    return self
-
-
-  def get(self):
-    return self.build
-
-
-db = Sql()
-
-# SELECT
-#     se.NAME
-# FROM
-#     Transactions AS td
-# INNER JOIN Transaction_Detail AS det
-# ON
-#     td.ID_Transaction = det.ID_Transaction
-# INNER JOIN Services AS se
-# ON
-#     det.ID_Services = se.ID_Services
-# WHERE
-#     td.ID_Transaction = 'TRA1'
-
-# result = db.select('id').where({
-#   'id':1,
-#   'purchase_ID':1,
-#   'product_line_ID':15
-# })
-# print(result.get())
-
-# result = db.select('id').where({
-#   'id':1,
-#   'purchase_ID':1,
-#   'product_line_ID':15
-# }).From('Purchase_item_table AS p1')
-
-# print(result.get())
-
-
-# result = db.select('id').From('Purchase_item_table AS p1').where({
-#   'id':1,
-#   'purchase_ID':1,
-#   'product_line_ID':15
-# }).order('p1.id' , ' DESC')
+      UpdateValue = UpdateValue + (value , )
+      Collection += ('' if Collection == '' else ' , ')+' `'+str(item)+'` = %s'
+    self.inputSet = UpdateValue + self.inputSet
+    self.build = ('UPDATE `{0}` SET {1}'.format(TableName , Collection)) + self.build
+    if out == "query":
+      Build    = self.build
+      InputSet = self.inputSet
+      self.FlushBuild()
+      return [ Build , InputSet ]
+    return self.exe(self.build , self.inputSet , 'answer')
+    
+  def getBulkUpdateEnd(self , Keys , UpdateFrom):
+    dataSet = ''
+    for item in Keys:
+      if not item == UpdateFrom:
+        dataSet = ('`{0}` = VALUES({1})'.format(item , item))+ ( '' if not dataSet else ' , ' ) + dataSet
+    return(' ON DUPLICATE KEY UPDATE {0} '.format(dataSet))
+    
+    
+    
+  def update_bulk(self , TableName , Collection , UpdateFrom = None , out = "result"):
+    if not UpdateFrom :
+      return False
+    Keys        = []
+    BulkValue   = []
+    InputPlaces = []
+    for item in Collection:
+      Value = ()
+      for key in item:
+        if not key in Keys:
+          Keys.append(key)
+          InputPlaces.append(' %s ')
+        Value = Value + (item[key] ,)
+      self.inputSetBulk.append(Value)
+    UpdateLayer = self.getBulkUpdateEnd(Keys  , UpdateFrom)
+    Keys        = '('+self.AllStr(Keys , "`")+')'
+    InputPlaces = '('+self.AllStr(InputPlaces , "")+')'
+    self.build = 'INSERT INTO `{0}` {1}  VALUES {2} {3}'.format(TableName , Keys , InputPlaces , UpdateLayer)
+    if out == "query":
+      Build    = self.build
+      InputSet = self.inputSetBulk
+      self.FlushBuild()
+      return [ Build , InputSet ]
+    return self.exe(self.build , self.inputSetBulk , 'answer' , True)
 
 
 
-# result = db.select('p1.id , p3.product_name_alias , p1.purchase_ID ').From('Purchase_item_table AS p1').join('purchase as p2', 'p2.id = p1.purchase_ID', 'LEFT').join('product_line_table as p3', 'p3.id = p1.product_line_ID', 'LEFT').where({
-#   'p1.id':'',
-# }).order('p1.id' , ' ASC')
-
-# result = db.insert('tb_import' , {
-#   'name'    :  'Nirikshan',
-#   'phone'   :  9861280012,
-#   'address' :  'Anamnager'
-# })
-
-# result = db.insert_bulk('tb_import' ,[
-#    {
-#     'name'    :  'Nirikshan',
-#     'phone'   :  444475,
-#     'address' :  'Anamnager4'
-#   },
-#   {
-#     'name'    :  'Nirikshan2',
-#     'phone'   :  12222,
-#     'address' :  'Anamnager3'
-#   },
-#   {
-#     'name'    :  'Nirikshan3',
-#     'phone'   :  3333656,
-#     'address' :  'Anamnager2'
-#   }
-# ])
-
-# result = db.update('tb_import' , {
-#     'name'    :  'Nirikshan3',
-#     'phone'   :  555245,
-#     'address' :  'Anamnager2'
-# }).where({
-#   'name':'nirikshan'
-# })
-
-
-result = db.update_bulk('tb_import' , [
-   {
-    'id'     :  1,
-    'name'    :  'Nirikshan',
-    'phone'   :  7855525,
-    'address' :  'Anamnager4'
-  },
-  {
-    'id'      :  2,
-    'name'    :  'Nirikshan2',
-    'phone'   :  989999,
-    'address' :  'Anamnager3'
-  },
-  {
-    'id'      :  3,
-    'name'    :  'Nirikshan3',
-    'phone'   :  2223,
-    'address' :  'Anamnager2'
-  }
-] , 'id')
-
-
-
-# result = db.select_distinct(' p1.id ,  p1.product_line_ID ,  p3.product_name_alias').From('Purchase_item_table AS p1').join('purchase as p2', 'p2.id = p1.purchase_ID', 'LEFT').join('product_line_table as p3', 'p3.id = p1.product_line_ID', 'LEFT').limit(1)
-
-print(result.get())
-
-# INSERT INTO `tb_import` (`id`, `name`, `phone`, `address`) VALUES (1 , 'nirikshan3' , 986 , 'anam') ON DUPLICATE KEY UPDATE name=VALUES(name),phone=VALUES(phone)
+  def get(self , out='result'):
+    CurrentBuild = self.build
+    CurrentInSet = self.inputSet
+    self.FlushBuild()
+    if out == 'query':
+      return [ CurrentBuild , CurrentInSet]
+    return self.exe(CurrentBuild , CurrentInSet)
+  
+  
+  
+  def exe(self ,CurrentBuild ,  CurrentInSet , get="data" , many = False):
+    self.FlushBuild()
+    cursor = self.cursor
+    if self.devtype == 'dev':
+      if many:
+        ans = cursor.executemany(CurrentBuild , CurrentInSet)
+      else:
+        ans = cursor.execute(CurrentBuild , CurrentInSet)
+    else:
+      try:
+        if many:
+          ans = cursor.executemany(CurrentBuild , CurrentInSet)
+        else:
+          ans = cursor.execute(CurrentBuild , CurrentInSet)
+      except:
+        ans = False
+    if get == 'data':
+      return cursor.fetchall()
+    return ans    
