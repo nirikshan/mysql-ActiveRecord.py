@@ -1,5 +1,3 @@
-from django.db import connection
-
 class db:
   
   def __init__(self , devtype = 'prod' ):
