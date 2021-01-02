@@ -1,6 +1,6 @@
 # sqlmy
 
-sqlmy is query builder for MY SQL database. I have created this package because I didn't found simple query builder for python.
+sqlmy is query builder for MY SQL database using python.
 
 ## Usage
 
